@@ -1,11 +1,13 @@
-'use strict';
+require('dotenv').config();
 
 const Slack = require('slack');
 
-const https = require('https'),
-      qs = require('querystring'),
-      VERIFICATION_TOKEN = "",
-      ACCESS_TOKEN = "";
+const https = require('https');
+const qs = require('querystring');
+const VERIFICATION_TOKEN = process.env.SLACK_VERIFICATION_TOKEN;
+const ACCESS_TOKEN = process.env.SLACK_ACCESS_TOKEN;
+
+const jira_utils = require("./jira-utils");
 
 function verify(data, callback) {
     if (data.token === VERIFICATION_TOKEN) {
@@ -24,9 +26,9 @@ let response = {
 };
 
 // Post message to Slack - https://api.slack.com/methods/chat.postMessage
-function process(event, callback) {
-  if (!event.bot_id && /(listen)/ig.test(event.text)) {
-      var text = `<@${event.user}> I listen to the messages!!`;
+function processEvent(event, callback) {
+  if (!event.bot_id && /(escucha)/ig.test(event.text)) {
+      var text = `<@${event.user}> escucho todos los mensajes!!`;
       var message = { 
           token: ACCESS_TOKEN,
           channel: event.channel,
@@ -34,6 +36,21 @@ function process(event, callback) {
       };
 
       Slack.chat.postMessage(message);
+  } else if (!event.bot_id && /(new incident)/ig.test(event.text)) {
+     
+      var message = { 
+          token: ACCESS_TOKEN,
+          channel: event.channel,
+          text: ''
+      };
+
+      message.text = "Creating jira issue!";
+      Slack.chat.postMessage(message);
+      jira_utils.create_issue()
+        .then(function(data) {
+          message.text = `<@${event.user}> Jira ticket created! ${jira_utils.get_jira_ticket_base_url()}/${data.key}`;
+           Slack.chat.postMessage(message);
+        })
   }
 
   response.body = JSON.stringify("ok");
@@ -42,14 +59,14 @@ function process(event, callback) {
 
 
 module.exports.run = (event, context, callback) => {
-  let body = JSON.parse(event.body);
+  // let body = JSON.parse(event.body);
   console.log("RUN STARTING!!!!!!")
-  // let body = event.body;
+  let body = event.body;
   console.log(body)
   switch (body.type) {
     case "url_verification": response.body = verify(body); break;
     case "event_callback":
-        process(body.event, callback);
+        processEvent(body.event, callback);
         break;
     default: 
         response.body = JSON.stringify("Bad request");
